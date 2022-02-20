@@ -3,19 +3,35 @@ from tkinter import *
 import time, json, os, datetime
 from tkinter import ttk
 from tkcalendar import *
+import pymongo
 
 
 CONFIG = 'config.json'
 clock_running = False
-paused = True
+
+
 if not os.path.exists(CONFIG):
     with open(CONFIG, 'w') as f:
         data = {}
         data['time'] = 0
         data['already_studied'] = 0
         data['target_date'] = 0
+        data['username'] = ""
+        data['user_mail'] = ""
         json.dump(data, f)
 
+
+def load_config():
+    with open(CONFIG, 'r+') as f:
+        data = json.load(f)
+    return data
+
+
+def write_to_config(data):
+    with open(CONFIG, 'r+') as f:
+        f.seek(0)
+        f.truncate(0)
+        json.dump(data, f)
 
 
 
@@ -23,22 +39,18 @@ def start():
     global clock_running
     clock_running = True
 
-    with open(CONFIG, 'r+') as f:
-        data = json.load(f)
-        already = data['already_studied']
+    data = load_config()
+    already = data['already_studied']
 
-        if already != 0: 
-            data['time'] = time.time()
-            data['already_studied'] = already
-            f.seek(0)
-            f.truncate(0)
-            json.dump(data, f)
-            
-        else:
-            data['time'] = time.time()
-            f.seek(0)
-            f.truncate(0)
-            json.dump(data, f)
+    if already != 0: 
+        data['time'] = time.time()
+        data['already_studied'] = already
+        write_to_config(data)      
+    else:
+        data['time'] = time.time()
+        write_to_config(data)
+
+
     def start_timer():
         if clock_running:
             ass = round(time.time() - data['time'])
@@ -49,21 +61,14 @@ def start():
 
 def pause():
     global clock_running
-    with open(CONFIG, 'r+') as f:
-        data = json.load(f)
+    if clock_running:
+        data = load_config()
         already = data['already_studied']
-
-        # print(study_time, "study time")
         start_time = data['time']
         data['already_studied'] = time.time() - start_time + already
-        # display_time(data['already_studied'])
         data['time'] = 0
-        f.seek(0)
-        f.truncate(0)
-        json.dump(data, f)
+        write_to_config(data)
     clock_running = False
-    global pause
-    pause = True
 
 
 
@@ -71,15 +76,11 @@ def reset():
     global clock_running, paused
     try: text.configure(text=f'Time Spent : 00:00:00')
     except: pass
-    with open(CONFIG, 'r+') as f:
-        data = json.load(f)
-        data['time'] = 0
-        data['already_studied'] = 0
-        f.seek(0)
-        f.truncate(0)
-        json.dump(data, f)
+    data = load_config()
+    data['time'] = 0
+    data['already_studied'] = 0
+    write_to_config(data)
     clock_running = False
-    paused = False
 
 
 window = tk.Tk()
@@ -109,21 +110,14 @@ tabControl = ttk.Notebook(window)
 tab1 = ttk.Frame(tabControl)
 tab2 = ttk.Frame(tabControl)
 tab3 = ttk.Frame(tabControl)
+tab4 = ttk.Frame(tabControl)
 
 tabControl.add(tab1, text='Time Tracker')
 tabControl.add(tab2, text='Goal Timeout')
 tabControl.add(tab3, text='Streak Counter')
+tabControl.add(tab4, text='Leader Board')
 
 tabControl.pack(expand=1, fill="both")
-
-# header = tk.Label(window, text="Time Tracker", width=45, height=1, fg="white", bg="#333333",
-#                     font=('times', 18, 'bold', 'underline'))
-# header.place(x=0, y=20)
-
-
-
-
-
 
 
 
@@ -132,7 +126,7 @@ tabControl.pack(expand=1, fill="both")
 ############################  TAB 1 CONTENT ##################################
 
 #### TIME TRACKER BAR
-study_time = json.load(open(CONFIG))['already_studied']
+study_time = load_config()['already_studied']
 study_time = str(datetime.timedelta(seconds=round(study_time)))
 text = tk.Label(tab1, text=f"Time Spent : {study_time}", width=45, height=2, fg="white", bg="#333333",
                     font=('times', 18, 'bold', 'underline'))
@@ -163,7 +157,6 @@ reset_btn.place(x=400, y=275)
 
 ############################  TAB 2 CONTENT ##################################
 def remaining_days(target_date=None):
-    # target_date = datetime.datetime(2021,6,27)
     today = datetime.datetime.utcnow()
     if not target_date: target_date = today
     return (target_date - today).days
@@ -177,13 +170,9 @@ def calender_pop():
     
     def get_date():
         target_date = datetime.datetime.strptime(cal.get_date() , '%m/%d/%y')
-        with open(CONFIG, 'r+') as f:
-            data = json.load(f)
-            data['target_date'] = remaining_days(target_date)
-            f.seek(0)
-            f.truncate(0)
-            json.dump(data, f)
-
+        data = load_config()
+        data['target_date'] = remaining_days(target_date)
+        write_to_config(data)
         cal.destroy()
         cal_btn.destroy()
         dayLeft.config(text=f"Days Remaining is : {remaining_days(target_date)}")
@@ -191,7 +180,7 @@ def calender_pop():
     cal_btn.place(x=275, y=275)
 
 
-dayLeft = tk.Label(tab2, text=f"Days Remaining : {json.load(open(CONFIG))['target_date']}", width=45, height=2, fg="white", bg="#333333",
+dayLeft = tk.Label(tab2, text=f"Days Remaining : {load_config()['target_date']}", width=45, height=2, fg="white", bg="#333333",
                     font=('times', 18, 'bold', 'underline'))
 dayLeft.place(x=0, y=30)
 
@@ -202,35 +191,94 @@ pause_btn = tk.Button(tab2, text="Set Date", command=calender_pop, fg="white", b
 pause_btn.place(x=205, y=300)
 
 
-
-
-
 ############################  TAB 3 CONTENT ##################################
+
+
+
+############################  TAB 4 CONTENT ##################################
+def load_database_collection():
+    dbConn = pymongo.MongoClient('mongodb+srv://<user>:<pass>@guicountercluster.om69r.mongodb.net/<db>?retryWrites=true&w=majority')
+    db = dbConn['guiCounterCluster']
+    collection = db['record']
+    return collection
+
+
+def update_leaderboard():
+    data = load_config()
+    collection = load_database_collection()
+    collection.update_one({'_id': data['user_mail']}, {'$set':{'today': data['already_studied']}})
+    players = collection.find({})
+    players = sorted(list(players), key= lambda x: x['today'], reverse=True)
+
+    for player_label in tab4.pack_slaves():
+        if type(player_label) == tk.Label:
+            player_label.pack_forget()
+    
+    display_leaderboard(players)
+
+if not load_config()['username']:
+    def register_user():
+        username = register_user_entry.get()
+        usermail = register_usermail_entry.get()
+        data = load_config()
+        data['username'] = username
+        data['user_mail'] = usermail
+        write_to_config(data)
+        
+        register_user_entry.destroy()
+        register_usermail_entry.destroy()
+        registerBtn.destroy()
+        # registerBtn.config(text='Reset User')
+        collection = load_database_collection()
+        try: collection.insert_one({'_id': usermail, 'username': username, 'today': data['already_studied']})
+        except: pass
+        refreshLeaderboardBtn = tk.Button(tab4, text='Refresh' ,command=update_leaderboard, height=1, width=14, fg="white", bg="#525252")
+        refreshLeaderboardBtn.pack(side=BOTTOM)
+
+    register_user_entry = tk.Entry(tab4, width=25)
+    register_user_entry.insert(0,'Enter Name')
+    register_user_entry.place(x=0, y=403)
+    register_usermail_entry = tk.Entry(tab4, width=35)
+    register_usermail_entry.insert(0,'Enter Email Id')
+    register_usermail_entry.place(x=150, y=403)
+    registerBtn = tk.Button(tab4, text='Register', command=register_user , height=1, width=7, fg="white", bg="#525252", font=('times',8))
+    registerBtn.place(x=350, y=403)
+else:
+    refreshLeaderboardBtn = tk.Button(tab4, text='Refresh' ,command=update_leaderboard, height=1, width=14, fg="white", bg="#525252")
+    refreshLeaderboardBtn.pack(side=BOTTOM)
+
+        
+
+
+players = load_database_collection().find({})
+players = sorted(list(players), key= lambda x: x['today'], reverse=True)
+# players = [{'username': 'Kunal', 'today': 10, 'this_week': 100}, {'username': 'Puneet', 'today': 10, 'this_week': 130}]
+
+def display_leaderboard(players):
+    for score in players:
+        tk.Label(tab4, text=f"{score['username']} > Today : {str(datetime.timedelta(seconds=round(score['today'])))}", 
+                        width=45, height=2, fg="white", bg="#3c4256",
+                        font=('times', 18, 'bold')).pack(pady=2)
+                      
+display_leaderboard(players)
+
+
 
 
 
 ############################  FOOTER CONTENT ##################################
 link2 = tk.Label(window, text="Copyright©2020, kunalduran.com", fg="blue", font=('times',8) )
 link2.place(x=430, y=430)
+
+
 def site(link):
     import webbrowser
     webbrowser.open(link)
 link2.bind("<Button-1>", lambda e: site("https://www.kunalduran.com"))
 label = tk.Label(window)
 
-def update_timer():
-    start()
-    text.configure(text=f"Time Spent : {str()}")
-    # text.after(1000, update_day_count)
-
-
-# def update_day_count():
-#     dayLeft.configure(text=f"Days Remaining : {str(remaining_days())}")
-#     dayLeft.after(1000, update_day_count)
-
-
-
-
-# update_day_count()
 
 window.mainloop()
+
+## 
+## pyinstaller --onefile --noconsole --hidden-import babel.numbers myscript.py
